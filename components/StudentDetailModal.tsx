@@ -48,10 +48,17 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                 return;
             }
 
+            console.log("DEBUG: Raw history data:", data);
+            console.log("DEBUG: Filtering for studentId:", studentId);
+
             // Filter client-side by checking the deeply joined student_id
             // @ts-ignore
             const studentLogs: ActivityLog[] = (data || [])
-                .filter((log: any) => log.snapshots?.documents?.student_id === studentId)
+                .filter((log: any) => {
+                    const matchId = log.snapshots?.documents?.student_id;
+                    console.log(`Comparing log snapshot student_id [${matchId}] with [${studentId}]`);
+                    return matchId === studentId;
+                })
                 .map((log: any) => ({
                     id: log.id,
                     created_at: log.created_at,
