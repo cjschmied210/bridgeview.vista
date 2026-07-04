@@ -24,8 +24,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
 
     useEffect(() => {
         const fetchHistory = async () => {
-            // Join analysis_logs -> snapshots -> documents to check student_id
-            // Order chronologically (ascending: true) so frame 0 is the start
+            // Join and filter analysis_logs -> snapshots -> documents directly in the DB query
             const { data, error } = await supabase
                 .from('analysis_logs')
                 .select(`
@@ -33,13 +32,14 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                     created_at,
                     behavior_category,
                     ai_feedback,
-                    snapshots (
+                    snapshots!inner (
                         content,
-                        documents (
+                        documents!inner (
                             student_id
                         )
                     )
                 `)
+                .eq('snapshots.documents.student_id', studentId)
                 .order('created_at', { ascending: true });
 
             if (error) {
@@ -48,24 +48,15 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                 return;
             }
 
-            console.log("DEBUG: Raw history data:", data);
-            console.log("DEBUG: Filtering for studentId:", studentId);
-
-            // Filter client-side by checking the deeply joined student_id
+            // Map the database-filtered logs into ActivityLog format
             // @ts-ignore
-            const studentLogs: ActivityLog[] = (data || [])
-                .filter((log: any) => {
-                    const matchId = log.snapshots?.documents?.student_id;
-                    console.log(`Comparing log snapshot student_id [${matchId}] with [${studentId}]`);
-                    return matchId === studentId;
-                })
-                .map((log: any) => ({
-                    id: log.id,
-                    created_at: log.created_at,
-                    behavior_category: log.behavior_category,
-                    ai_feedback: log.ai_feedback,
-                    snapshot_content: log.snapshots?.content || ""
-                }));
+            const studentLogs: ActivityLog[] = (data || []).map((log: any) => ({
+                id: log.id,
+                created_at: log.created_at,
+                behavior_category: log.behavior_category,
+                ai_feedback: log.ai_feedback,
+                snapshot_content: log.snapshots?.content || ""
+            }));
 
             setHistory(studentLogs);
             // Default to showing the latest snapshot when modal opens
