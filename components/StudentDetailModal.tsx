@@ -21,7 +21,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
 
     useEffect(() => {
         const fetchHistory = async () => {
-            // Join analysis_logs -> snapshots to get content
+            // Join analysis_logs -> snapshots -> documents to check student_id
             const { data, error } = await supabase
                 .from('analysis_logs')
                 .select(`
@@ -31,20 +31,12 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                     ai_feedback,
                     snapshots (
                         content,
-                        student_id
+                        documents (
+                            student_id
+                        )
                     )
                 `)
                 .order('created_at', { ascending: false });
-
-            // Since we can't easily filter by student_id in a deep join without inner join syntax or filtering in JS,
-            // we will fetch recent logs and filter client side for this prototype, or use stricter query.
-            // Better query:
-            // But 'snapshots' has student_id.
-
-            // Let's try the more precise query:
-            // We need logs where snapshot.student_id == studentId.
-            // Supabase filtering on foreign tables:
-            // .eq('snapshots.student_id', studentId) should work if we verify relationship.
 
             if (error) {
                 console.error("Error fetching history:", error);
@@ -52,15 +44,17 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                 return;
             }
 
-            // Client-side filter for safety/ease if join syntax is tricky
+            // Filter client-side by checking the deeply joined student_id
             // @ts-ignore
-            const studentLogs = data.filter((log: any) => log.snapshots?.student_id === studentId).map((log: any) => ({
-                id: log.id,
-                created_at: log.created_at,
-                behavior_category: log.behavior_category,
-                ai_feedback: log.ai_feedback,
-                snapshot_content: log.snapshots?.content || "No content"
-            }));
+            const studentLogs = (data || [])
+                .filter((log: any) => log.snapshots?.documents?.student_id === studentId)
+                .map((log: any) => ({
+                    id: log.id,
+                    created_at: log.created_at,
+                    behavior_category: log.behavior_category,
+                    ai_feedback: log.ai_feedback,
+                    snapshot_content: log.snapshots?.content || "No content"
+                }));
 
             setHistory(studentLogs);
             setLoading(false);
