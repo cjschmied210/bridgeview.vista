@@ -65,14 +65,53 @@ export async function POST(req: Request) {
       }
     `;
 
-        // 3. Call Gemini
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        // 3. Call Gemini (with rules-based fallback on failure)
+        let analysis = {
+            status: "flowing",
+            summary: "Active writing session.",
+            intervention_suggested: false
+        };
 
-        // Clean JSON markdown if present
-        const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const analysis = JSON.parse(cleanJson);
+        try {
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            // Clean JSON markdown if present
+            const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            analysis = JSON.parse(cleanJson);
+        } catch (geminiError) {
+            console.warn("Gemini analysis failed, running rules-based fallback:", geminiError);
+            
+            // Basic metric rules-based analysis fallback
+            let status = 'flowing';
+            let summary = 'Active writing process.';
+            let intervention = false;
+
+            if (charDiff > 20) {
+                status = 'flowing';
+                summary = `Writing: added ${charDiff} characters.`;
+            } else if (charDiff < -100) {
+                status = 'distressed';
+                summary = `Large deletion: removed ${Math.abs(charDiff)} characters.`;
+                intervention = true;
+            } else if (Math.abs(charDiff) <= 20) {
+                if (timeDiffSeconds > 60) {
+                    status = 'stalled';
+                    summary = `Stalled: no activity for ${timeDiffSeconds} seconds.`;
+                    intervention = true;
+                } else {
+                    status = 'editing';
+                    summary = 'Editing and refining content.';
+                }
+            }
+
+            analysis = {
+                status: status,
+                summary: summary + " (Fallback)",
+                intervention_suggested: intervention
+            };
+        }
 
         // 4. Update Database
         // Log analysis
