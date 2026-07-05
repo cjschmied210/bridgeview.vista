@@ -7,6 +7,7 @@ interface StudentCardProps {
     status: 'flowing' | 'editing' | 'stalled' | 'distressed';
     lastEvent?: string;
     summary?: string;
+    activeDocumentTitle?: string;
     onClick?: () => void;
     classrooms?: { id: string; name: string }[];
     onAssignClass?: (studentId: string, classroomId: string | null) => void;
@@ -19,7 +20,7 @@ const statusColors = {
     distressed: 'bg-red-50 border-red-200 text-red-900',
 };
 
-export default function StudentCard({ id, name, status, lastEvent, summary, onClick, classrooms = [], onAssignClass }: StudentCardProps) {
+export default function StudentCard({ id, name, status, lastEvent, summary, activeDocumentTitle, onClick, classrooms = [], onAssignClass }: StudentCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +63,11 @@ export default function StudentCard({ id, name, status, lastEvent, summary, onCl
                 <p className="text-[10px] opacity-75 mb-2">
                     Last active: {lastEvent || "No recent activity"}
                 </p>
+                {activeDocumentTitle && (
+                    <p className="text-[10px] font-semibold opacity-90 truncate max-w-full" title={activeDocumentTitle}>
+                        📄 {activeDocumentTitle}
+                    </p>
+                )}
                 {summary && (
                     <div className="mt-2 text-xs italic bg-white/40 p-2 rounded border border-black/5 line-clamp-3">
                         "{summary}"

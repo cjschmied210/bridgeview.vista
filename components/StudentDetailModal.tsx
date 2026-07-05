@@ -13,6 +13,8 @@ interface ActivityLog {
     behavior_category: string;
     ai_feedback: string;
     snapshot_content: string | null;
+    document_id: string;
+    document_title: string;
 }
 
 export default function StudentDetailModal({ studentId, studentName, onClose }: StudentDetailModalProps) {
@@ -20,6 +22,8 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
     const [loading, setLoading] = useState(true);
     const [currentFrameIndex, setCurrentFrameIndex] = useState<number>(0);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const [documents, setDocuments] = useState<{ id: string; title: string }[]>([]);
+    const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
     const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
@@ -35,6 +39,8 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                     snapshots!inner (
                         content,
                         documents!inner (
+                            id,
+                            title,
                             student_id
                         )
                     )
@@ -55,13 +61,29 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                 created_at: log.created_at,
                 behavior_category: log.behavior_category,
                 ai_feedback: log.ai_feedback,
-                snapshot_content: log.snapshots?.content || ""
+                snapshot_content: log.snapshots?.content || "",
+                document_id: log.snapshots?.documents?.id || "",
+                document_title: log.snapshots?.documents?.title || "Untitled Document"
             }));
 
             setHistory(studentLogs);
-            // Default to showing the latest snapshot when modal opens
-            if (studentLogs.length > 0) {
-                setCurrentFrameIndex(studentLogs.length - 1);
+
+            // Extract unique documents
+            const uniqueDocsMap = new Map<string, string>();
+            studentLogs.forEach(log => {
+                if (log.document_id) {
+                    uniqueDocsMap.set(log.document_id, log.document_title);
+                }
+            });
+            const uniqueDocs = Array.from(uniqueDocsMap.entries()).map(([id, title]) => ({ id, title }));
+            setDocuments(uniqueDocs);
+
+            // Default to showing the most recently active document
+            if (uniqueDocs.length > 0) {
+                const latestDocId = studentLogs[studentLogs.length - 1].document_id;
+                setSelectedDocId(latestDocId);
+                const docFrames = studentLogs.filter(h => h.document_id === latestDocId);
+                setCurrentFrameIndex(Math.max(0, docFrames.length - 1));
             }
             setLoading(false);
         };
@@ -69,12 +91,15 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
         fetchHistory();
     }, [studentId]);
 
+    // Filter history to current active document
+    const filteredHistory = history.filter(h => h.document_id === selectedDocId);
+
     // Handle playback loop
     useEffect(() => {
         if (isPlaying) {
             playbackTimerRef.current = setInterval(() => {
                 setCurrentFrameIndex((prevIndex) => {
-                    if (prevIndex >= history.length - 1) {
+                    if (prevIndex >= filteredHistory.length - 1) {
                         setIsPlaying(false);
                         return prevIndex;
                     }
@@ -92,14 +117,14 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                 clearInterval(playbackTimerRef.current);
             }
         };
-    }, [isPlaying, history.length]);
+    }, [isPlaying, filteredHistory.length]);
 
     const handlePlayPause = () => {
         if (isPlaying) {
             setIsPlaying(false);
         } else {
             // If we're at the end, restart from the beginning
-            if (currentFrameIndex >= history.length - 1) {
+            if (currentFrameIndex >= filteredHistory.length - 1) {
                 setCurrentFrameIndex(0);
             }
             setIsPlaying(true);
@@ -113,10 +138,10 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
 
     const handleNext = () => {
         setIsPlaying(false);
-        setCurrentFrameIndex((prev) => Math.min(history.length - 1, prev + 1));
+        setCurrentFrameIndex((prev) => Math.min(filteredHistory.length - 1, prev + 1));
     };
 
-    const activeFrame = history[currentFrameIndex] || null;
+    const activeFrame = filteredHistory[currentFrameIndex] || null;
 
     // Helper to get behavior colors for heatmap & status badge
     const getBehaviorClass = (category: string) => {
@@ -185,6 +210,29 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                         </div>
                     ) : (
                         <>
+                            {/* Document Selector Header (Only if multiple documents exist) */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-lg border border-stone-200 shadow-sm">
+                                <div className="text-sm font-semibold text-stone-700">
+                                    📂 Assignments ({documents.length})
+                                </div>
+                                <select
+                                    value={selectedDocId || ''}
+                                    onChange={(e) => {
+                                        setIsPlaying(false);
+                                        const docId = e.target.value;
+                                        setSelectedDocId(docId);
+                                        // Reset current frame to the latest frame of the newly selected document
+                                        const docFrames = history.filter(h => h.document_id === docId);
+                                        setCurrentFrameIndex(Math.max(0, docFrames.length - 1));
+                                    }}
+                                    className="text-sm border border-stone-300 rounded px-2.5 py-1.5 bg-stone-50 font-medium text-stone-700 focus:outline-none focus:ring-1 focus:ring-stone-900 cursor-pointer max-w-full sm:max-w-xs truncate"
+                                >
+                                    {documents.map(doc => (
+                                        <option key={doc.id} value={doc.id}>{doc.title}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* Text Viewer Panel */}
                             <div className="flex-1 flex flex-col bg-white rounded-lg border border-stone-200 shadow-sm overflow-hidden min-h-[300px]">
                                 {/* Viewer Status Header */}
@@ -199,7 +247,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                                         </span>
                                     </div>
                                     <span className="text-stone-400 text-xs font-semibold">
-                                        Update {currentFrameIndex + 1} of {history.length}
+                                        Update {currentFrameIndex + 1} of {filteredHistory.length}
                                     </span>
                                 </div>
 
@@ -221,7 +269,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                                     
                                     {/* Heatmap Grid Row */}
                                     <div className="flex items-center gap-1.5 overflow-x-auto py-2 scrollbar-thin">
-                                        {history.map((item, index) => {
+                                        {filteredHistory.map((item, index) => {
                                             const active = index === currentFrameIndex;
                                             return (
                                                 <button
@@ -261,7 +309,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                                         </button>
                                         <button
                                             onClick={handleNext}
-                                            disabled={currentFrameIndex === history.length - 1}
+                                            disabled={currentFrameIndex === filteredHistory.length - 1}
                                             title="Next Frame"
                                             className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 font-semibold rounded text-sm transition-colors"
                                         >
@@ -274,7 +322,7 @@ export default function StudentDetailModal({ studentId, studentName, onClose }: 
                                         <input
                                             type="range"
                                             min={0}
-                                            max={history.length - 1}
+                                            max={filteredHistory.length - 1}
                                             value={currentFrameIndex}
                                             onChange={(e) => {
                                                 setIsPlaying(false);

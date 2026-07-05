@@ -15,6 +15,7 @@ interface Student {
     last_active: string;
     summary?: string;
     classroom_id?: string;
+    active_document_title?: string;
 }
 
 interface Classroom {
@@ -61,16 +62,40 @@ export default function Home() {
                 // 1. Fetch Classrooms
                 await loadClassrooms();
 
-                // 2. Fetch Students
+                // 2. Fetch Students with their documents
                 const { data: studentData, error: studentError } = await supabase
                     .from('students')
-                    .select('*')
+                    .select(`
+                        *,
+                        documents (
+                            id,
+                            title,
+                            last_updated
+                        )
+                    `)
                     .order('name');
 
                 if (studentError) {
                     console.error('Error fetching students:', studentError);
                 } else if (studentData) {
-                    setStudents(studentData as Student[]);
+                    const formattedStudents = studentData.map((student: any) => {
+                        const docs = student.documents || [];
+                        let activeDocTitle = undefined;
+                        if (docs.length > 0) {
+                            const sortedDocs = [...docs].sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime());
+                            activeDocTitle = sortedDocs[0].title;
+                        }
+                        return {
+                            id: student.id,
+                            name: student.name,
+                            status: student.status,
+                            last_active: student.last_active,
+                            classroom_id: student.classroom_id,
+                            summary: student.summary,
+                            active_document_title: activeDocTitle
+                        };
+                    });
+                    setStudents(formattedStudents as Student[]);
                 }
             } catch (err) {
                 console.error('Unexpected error:', err);
@@ -146,7 +171,7 @@ export default function Home() {
 
                     const { data: doc } = await supabase
                         .from('documents')
-                        .select('student_id')
+                        .select('student_id, title')
                         .eq('id', snapshot.document_id)
                         .single();
 
@@ -154,7 +179,11 @@ export default function Home() {
 
                     const studentId = doc.student_id;
                     setStudents((prev) =>
-                        prev.map((s) => (s.id === studentId ? { ...s, summary: newLog.ai_feedback } : s))
+                        prev.map((s) => (s.id === studentId ? { 
+                            ...s, 
+                            summary: newLog.ai_feedback,
+                            active_document_title: doc.title || "Untitled Document"
+                        } : s))
                     );
                 }
             )
@@ -285,6 +314,7 @@ export default function Home() {
                                         status={student.status}
                                         lastEvent={new Date(student.last_active).toLocaleTimeString()}
                                         summary={student.summary}
+                                        activeDocumentTitle={student.active_document_title}
                                         classrooms={classrooms}
                                         onAssignClass={handleAssignClass}
                                         onClick={() => setSelectedStudent(student)}
