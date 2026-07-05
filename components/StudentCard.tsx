@@ -11,6 +11,7 @@ interface StudentCardProps {
     onClick?: () => void;
     classrooms?: { id: string; name: string }[];
     onAssignClass?: (studentId: string, classroomId: string | null) => void;
+    onDeleteStudent?: (studentId: string) => void;
 }
 
 const statusColors = {
@@ -20,7 +21,7 @@ const statusColors = {
     distressed: 'bg-red-50 border-red-200 text-red-900',
 };
 
-export default function StudentCard({ id, name, status, lastEvent, summary, activeDocumentTitle, onClick, classrooms = [], onAssignClass }: StudentCardProps) {
+export default function StudentCard({ id, name, status, lastEvent, summary, activeDocumentTitle, onClick, classrooms = [], onAssignClass, onDeleteStudent }: StudentCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +105,20 @@ export default function StudentCard({ id, name, status, lastEvent, summary, acti
                                 🏫 {c.name}
                             </button>
                         ))}
+                        {onDeleteStudent && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(false);
+                                    if (window.confirm(`Are you sure you want to delete ${name} and all their history? This cannot be undone.`)) {
+                                        onDeleteStudent(id);
+                                    }
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 hover:text-red-750 text-red-600 transition-colors font-semibold border-t border-stone-150 flex items-center gap-1"
+                            >
+                                🗑️ Delete Student
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

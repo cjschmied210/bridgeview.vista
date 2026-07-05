@@ -214,6 +214,38 @@ export default function Home() {
         }
     };
 
+    const handleDeleteStudent = async (studentId: string) => {
+        // Keep a backup of current state for rollback
+        const originalStudents = [...students];
+
+        // Optimistically remove from local state
+        setStudents((prev) => prev.filter(s => s.id !== studentId));
+
+        try {
+            const response = await fetch('/api/student/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ student_id: studentId }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete student from the server');
+            }
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+
+            console.log(`Student ${studentId} successfully deleted.`);
+        } catch (error) {
+            console.error("Error deleting student:", error);
+            alert("Error: Could not delete student. Reverting dashboard card.");
+            // Rollback local state
+            setStudents(originalStudents);
+        }
+    };
+
     // Filter students by selected classroom
     const visibleStudents = students.filter(s =>
         selectedClassroom ? s.classroom_id === selectedClassroom : !s.classroom_id
@@ -317,6 +349,7 @@ export default function Home() {
                                         activeDocumentTitle={student.active_document_title}
                                         classrooms={classrooms}
                                         onAssignClass={handleAssignClass}
+                                        onDeleteStudent={handleDeleteStudent}
                                         onClick={() => setSelectedStudent(student)}
                                     />
                                 ))
