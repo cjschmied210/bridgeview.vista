@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     console.log("Received INGEST request");
     try {
         const body = await req.json();
-        const { student_id, student_name, document_id, text_content, timestamp } = body;
+        const { student_id, student_name, document_id, document_title, text_content, timestamp } = body;
 
         if (!student_id || !document_id || typeof text_content !== "string") {
             return NextResponse.json(
@@ -39,12 +39,13 @@ export async function POST(req: Request) {
             }).eq('id', student_id);
         }
 
-        // Upsert Document
+        // Upsert Document with Title
         const { error: docError } = await supabase
             .from('documents')
             .upsert({
                 id: document_id,
                 student_id: student_id,
+                title: document_title || "Untitled Document",
                 last_updated: new Date().toISOString()
             }, { onConflict: 'id' });
 

@@ -132,6 +132,7 @@ function syncToDashboardInternal() {
         const body = doc.getBody();
         const text = body.getText();
         const docId = doc.getId();
+        const docTitle = doc.getName();
 
         // --- ADAPTIVE SYNCING LOGIC ---
         const lastContent = props.getProperty("LAST_SYNC_CONTENT") || "";
@@ -159,6 +160,7 @@ function syncToDashboardInternal() {
             student_id: studentId,
             student_name: studentName,
             document_id: docId,
+            document_title: docTitle,
             text_content: text,
             timestamp: Date.now()
         };
