@@ -14,19 +14,35 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check if student exists
-        const { data: existingStudent } = await supabase
+        // Check if student exists by ID
+        let { data: existingStudent } = await supabase
             .from('students')
             .select('id, name, classroom_id')
             .eq('id', student_id)
             .single();
 
+        let finalStudentId = student_id;
         const studentName = student_name?.trim() || existingStudent?.name || `Student ${student_id.substring(0, 6)}`;
+
+        // Smart name-matching: if not found by ID, check if a student with the same name already exists
+        if (!existingStudent && student_name) {
+            const { data: studentByName } = await supabase
+                .from('students')
+                .select('id, name, classroom_id')
+                .ilike('name', student_name.trim())
+                .maybeSingle();
+
+            if (studentByName) {
+                existingStudent = studentByName;
+                finalStudentId = studentByName.id;
+                console.log(`Smart Match: Merged new document for student name "${studentName}" to existing ID ${finalStudentId}`);
+            }
+        }
 
         if (!existingStudent) {
             // Create new student as unassigned (classroom_id: null)
             await supabase.from('students').insert({
-                id: student_id,
+                id: finalStudentId,
                 name: studentName,
                 classroom_id: null,
                 last_active: new Date().toISOString()
@@ -36,7 +52,7 @@ export async function POST(req: Request) {
             await supabase.from('students').update({
                 name: studentName,
                 last_active: new Date().toISOString()
-            }).eq('id', student_id);
+            }).eq('id', finalStudentId);
         }
 
         // Upsert Document with Title
@@ -44,7 +60,7 @@ export async function POST(req: Request) {
             .from('documents')
             .upsert({
                 id: document_id,
-                student_id: student_id,
+                student_id: finalStudentId,
                 title: document_title || "Untitled Document",
                 last_updated: new Date().toISOString()
             }, { onConflict: 'id' });
@@ -64,7 +80,7 @@ export async function POST(req: Request) {
 
         if (snapError) console.error('Snapshot insert error:', snapError);
 
-        console.log("Ingested snapshot for:", student_id);
+        console.log("Ingested snapshot for:", finalStudentId);
         const snapshot_id = snapshotData?.id;
 
         // Trigger Async Analysis (Fire and forget)
@@ -73,11 +89,15 @@ export async function POST(req: Request) {
             fetch(`${origin}/api/analysis`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ document_id, student_id, snapshot_id })
+                body: JSON.stringify({ document_id, student_id: finalStudentId, snapshot_id })
             }).catch(err => console.error("Async analysis trigger failed:", err));
         }
 
-        return NextResponse.json({ status: "success", received_at: new Date().toISOString() });
+        return NextResponse.json({ 
+            status: "success", 
+            student_id: finalStudentId,
+            received_at: new Date().toISOString() 
+        });
     } catch (error) {
         console.error("Ingest error:", error);
         return NextResponse.json(

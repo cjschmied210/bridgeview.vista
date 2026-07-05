@@ -175,10 +175,24 @@ function syncToDashboardInternal() {
 
         const response = UrlFetchApp.fetch(API_ENDPOINT, options);
         const code = response.getResponseCode();
+        const responseText = response.getContentText();
 
-        console.log(`Sync status: ${code}`, response.getContentText());
+        console.log(`Sync status: ${code}`, responseText);
 
-        return code === 200 || code === 201;
+        if (code === 200 || code === 201) {
+            try {
+                const responseData = JSON.parse(responseText);
+                if (responseData.student_id && responseData.student_id !== studentId) {
+                    props.setProperty("STUDENT_ID", responseData.student_id);
+                    console.log(`Updated local STUDENT_ID to matched server ID: ${responseData.student_id}`);
+                }
+            } catch (jsonErr) {
+                console.warn("Could not parse response JSON:", jsonErr);
+            }
+            return true;
+        }
+
+        return false;
     } catch (e) {
         console.error("Sync failed", e);
         return false;
