@@ -44,10 +44,11 @@ function getStudentInfo() {
 
 function onOpen() {
     DocumentApp.getUi()
-        .createMenu('Bridgeview Vista')
-        .addItem('Start Monitoring', 'startMonitoring')
-        .addItem('Stop Monitoring', 'stopMonitoring')
-        .addItem('Force Sync Now', 'syncToDashboardManual')
+        .createMenu('📝 Classroom Monitor')
+        .addItem('▶️ Start Monitoring', 'startMonitoring')
+        .addItem('⏹️ Stop Monitoring', 'stopMonitoring')
+        .addSeparator()
+        .addItem('🔄 Force Sync Now', 'syncToDashboardManual')
         .addToUi();
 }
 
@@ -131,6 +132,27 @@ function syncToDashboardInternal() {
         const body = doc.getBody();
         const text = body.getText();
         const docId = doc.getId();
+
+        // --- ADAPTIVE SYNCING LOGIC ---
+        const lastContent = props.getProperty("LAST_SYNC_CONTENT") || "";
+        let stallCount = parseInt(props.getProperty("STALL_COUNT") || "0", 10);
+
+        if (text === lastContent) {
+            stallCount++;
+            props.setProperty("STALL_COUNT", stallCount.toString());
+
+            // If stalled for over 3 minutes, throttle updates to once every 5 minutes (5 cycles)
+            if (stallCount > 3 && (stallCount - 3) % 5 !== 0) {
+                console.log(`Adaptive Sync: Skipping send (stalled for ${stallCount} minutes)`);
+                return true; 
+            }
+        } else {
+            // Text changed! Reset stall counter
+            stallCount = 0;
+            props.setProperty("STALL_COUNT", "0");
+            props.setProperty("LAST_SYNC_CONTENT", text);
+        }
+        // ------------------------------
 
         // Construct Payload
         const payload = {
