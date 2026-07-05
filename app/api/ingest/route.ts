@@ -26,13 +26,14 @@ export async function POST(req: Request) {
 
         // Smart name-matching: if not found by ID, check if a student with the same name already exists
         if (!existingStudent && student_name) {
-            const { data: studentByName } = await supabase
+            const { data: studentsByName } = await supabase
                 .from('students')
                 .select('id, name, classroom_id')
                 .ilike('name', student_name.trim())
-                .maybeSingle();
+                .limit(1);
 
-            if (studentByName) {
+            if (studentsByName && studentsByName.length > 0) {
+                const studentByName = studentsByName[0];
                 existingStudent = studentByName;
                 finalStudentId = studentByName.id;
                 console.log(`Smart Match: Merged new document for student name "${studentName}" to existing ID ${finalStudentId}`);
