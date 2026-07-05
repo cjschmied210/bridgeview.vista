@@ -49,16 +49,22 @@ export default function StudentCard({ id, name, status, lastEvent, summary, acti
         }
     };
 
+    const isPasteAlert = status === 'distressed' && summary?.includes('Paste');
+
     return (
         <div
             onClick={onClick}
-            className={`p-4 rounded-lg border shadow-sm transition-all cursor-pointer hover:shadow-md hover:scale-[1.01] flex flex-col justify-between min-h-[160px] relative ${statusColors[status]}`}
+            className={`p-4 rounded-lg border shadow-sm transition-all cursor-pointer hover:shadow-md hover:scale-[1.01] flex flex-col justify-between min-h-[160px] relative ${
+                isPasteAlert 
+                    ? 'bg-red-50 border-red-400 text-red-950 ring-2 ring-red-500/20 shadow-lg shadow-red-100/50 animate-pulse' 
+                    : statusColors[status]
+            }`}
         >
             <div>
                 <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-lg leading-tight truncate mr-2">{name}</h3>
                     <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-white/60 shadow-sm shrink-0">
-                        {status}
+                        {isPasteAlert ? '⚠️ Paste' : status}
                     </span>
                 </div>
                 <p className="text-[10px] opacity-75 mb-2">

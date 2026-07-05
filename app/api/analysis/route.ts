@@ -35,6 +35,9 @@ export async function POST(req: Request) {
         const prevLen = previousContent.length;
         const charDiff = currentLen - prevLen;
 
+        // Smart Paste Detection: flag if character difference exceeds 300 characters in a single sync
+        const isPaste = charDiff > 300 && snapshots.length > 1;
+
         // 2. Construct Prompt with Metrics
         const prompt = `
       You are an expert writing coach observing a student's drafting process in real-time.
@@ -65,52 +68,60 @@ export async function POST(req: Request) {
       }
     `;
 
-        // 3. Call Gemini (with rules-based fallback on failure)
+        // 3. Call Gemini or execute Paste Detection rules
         let analysis = {
             status: "flowing",
             summary: "Active writing session.",
             intervention_suggested: false
         };
 
-        try {
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            // Clean JSON markdown if present
-            const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            analysis = JSON.parse(cleanJson);
-        } catch (geminiError) {
-            console.warn("Gemini analysis failed, running rules-based fallback:", geminiError);
-            
-            // Basic metric rules-based analysis fallback
-            let status = 'flowing';
-            let summary = 'Active writing process.';
-            let intervention = false;
-
-            if (charDiff > 20) {
-                status = 'flowing';
-                summary = `Writing: added ${charDiff} characters.`;
-            } else if (charDiff < -100) {
-                status = 'distressed';
-                summary = `Large deletion: removed ${Math.abs(charDiff)} characters.`;
-                intervention = true;
-            } else if (Math.abs(charDiff) <= 20) {
-                if (timeDiffSeconds > 60) {
-                    status = 'stalled';
-                    summary = `Stalled: no activity for ${timeDiffSeconds} seconds.`;
-                    intervention = true;
-                } else {
-                    status = 'editing';
-                    summary = 'Editing and refining content.';
-                }
-            }
-
+        if (isPaste) {
             analysis = {
-                status: status,
-                summary: summary + " (Fallback)",
-                intervention_suggested: intervention
+                status: "distressed",
+                summary: `⚠️ Paste event: added ${charDiff} characters instantly.`,
+                intervention_suggested: true
             };
+        } else {
+            try {
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const text = response.text();
+
+                // Clean JSON markdown if present
+                const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+                analysis = JSON.parse(cleanJson);
+            } catch (geminiError) {
+                console.warn("Gemini analysis failed, running rules-based fallback:", geminiError);
+                
+                // Basic metric rules-based analysis fallback
+                let status = 'flowing';
+                let summary = 'Active writing process.';
+                let intervention = false;
+
+                if (charDiff > 20) {
+                    status = 'flowing';
+                    summary = `Writing: added ${charDiff} characters.`;
+                } else if (charDiff < -100) {
+                    status = 'distressed';
+                    summary = `Large deletion: removed ${Math.abs(charDiff)} characters.`;
+                    intervention = true;
+                } else if (Math.abs(charDiff) <= 20) {
+                    if (timeDiffSeconds > 60) {
+                        status = 'stalled';
+                        summary = `Stalled: no activity for ${timeDiffSeconds} seconds.`;
+                        intervention = true;
+                    } else {
+                        status = 'editing';
+                        summary = 'Editing and refining content.';
+                    }
+                }
+
+                analysis = {
+                    status: status,
+                    summary: summary + " (Fallback)",
+                    intervention_suggested: intervention
+                };
+            }
         }
 
         // 4. Update Database
