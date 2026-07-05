@@ -42,26 +42,32 @@ export async function POST(req: NextRequest) {
             const snapIds = (snaps || []).map(s => s.id);
 
             if (snapIds.length > 0) {
-                // 3. Delete analysis logs linked to these snapshots
-                const { error: logsDelError } = await supabase
-                    .from('analysis_logs')
-                    .delete()
-                    .in('snapshot_id', snapIds);
+                // Chunk deletion to prevent PostgREST URI parameter size limit errors on large histories (e.g. 1000+ snapshots)
+                const chunkSize = 200;
+                for (let i = 0; i < snapIds.length; i += chunkSize) {
+                    const chunk = snapIds.slice(i, i + chunkSize);
 
-                if (logsDelError) {
-                    console.error("Error deleting analysis logs:", logsDelError);
-                    return NextResponse.json({ error: logsDelError.message }, { status: 500 });
-                }
+                    // 3. Delete analysis logs linked to this chunk of snapshots
+                    const { error: logsDelError } = await supabase
+                        .from('analysis_logs')
+                        .delete()
+                        .in('snapshot_id', chunk);
 
-                // 4. Delete snapshots
-                const { error: snapsDelError } = await supabase
-                    .from('snapshots')
-                    .delete()
-                    .in('id', snapIds);
+                    if (logsDelError) {
+                        console.error("Error deleting analysis logs chunk:", logsDelError);
+                        return NextResponse.json({ error: logsDelError.message }, { status: 500 });
+                    }
 
-                if (snapsDelError) {
-                    console.error("Error deleting snapshots:", snapsDelError);
-                    return NextResponse.json({ error: snapsDelError.message }, { status: 500 });
+                    // 4. Delete snapshots in this chunk
+                    const { error: snapsDelError } = await supabase
+                        .from('snapshots')
+                        .delete()
+                        .in('id', chunk);
+
+                    if (snapsDelError) {
+                        console.error("Error deleting snapshots chunk:", snapsDelError);
+                        return NextResponse.json({ error: snapsDelError.message }, { status: 500 });
+                    }
                 }
             }
 
